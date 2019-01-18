@@ -1,5 +1,5 @@
 #!/bin/bash
-#git clone https://github.com/jfdenise/galleon-openshift /galleon-openshift
+git clone https://github.com/jfdenise/galleon-openshift/ /galleon-openshift
 cd /galleon-openshift/maven
 mvn package -Dinstall.dir=/wildfly-core -DwildflyLocation=$WILDFLY_LOCATION
 rm -rf ~/.m2
