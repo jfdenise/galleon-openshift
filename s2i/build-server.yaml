@@ -1,0 +1,50 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  labels:
+    app: build-server
+  name: build-server
+spec:
+  failedBuildsHistoryLimit: 5
+  nodeSelector: null
+  output:
+    to:
+      kind: ImageStreamTag
+      name: wildfly-servlet-galleon:latest
+  postCommit: {}
+  resources: {}
+  runPolicy: Serial
+  source:
+    dockerfile: |
+            FROM openjdk:8-jre
+            RUN useradd -r -u 1001 appuser
+            RUN apt-get update -y && apt-get install maven -y
+            RUN apt-get install git -y
+            ARG wildflyLocation
+            ENV WILDFLY_LOCATION=$wildflyLocation
+            RUN git clone https://github.com/jfdenise/galleon-openshift/ galleon-openshift
+            RUN sh /galleon-openshift/scripts/provision-server.sh
+            RUN groupadd -r jboss -g 1000 && useradd -u 1000 -r -g jboss -m -d /opt/jboss -s /sbin/nologin -c "JBoss user" jboss && chmod 755 /opt/jboss
+            EXPOSE 8080
+            EXPOSE 9990
+            LABEL io.openshift.expose-services="8080:http"
+            USER 1000
+            CMD ["/wildfly-core/bin/standalone.sh", "-bmanagement", "0.0.0.0", "-b", "0.0.0.0"]
+    type: Dockerfile
+  strategy:
+    dockerStrategy:
+      buildArgs:
+      - name: wildflyLocation
+        value: wildfly-servlet@maven(org.jboss.universe:community-universe):current/beta
+    type: Docker
+  successfulBuildsHistoryLimit: 5
+  triggers:
+  - github:
+      secret: edCwK4v41lK8GpgU11Pc
+    type: GitHub
+  - generic:
+      secret: _bQTqwxvGQ8BTq87w5Fc
+    type: Generic
+  - type: ConfigChange
+  - imageChange:
+    type: ImageChange

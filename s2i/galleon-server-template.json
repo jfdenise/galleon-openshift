@@ -1,0 +1,279 @@
+{
+    "kind": "Template",
+    "apiVersion": "v1",
+    "metadata": {
+        "annotations": {
+            "iconClass": "icon-eap",
+            "tags": "eap,javaee,java,jboss",
+            "version": "14.0",
+            "openshift.io/display-name": "Wildly server provisioned from galleon",
+            "openshift.io/provider-display-name": "Red Hat, Inc.",
+            "description": "An example JBoss Enterprise Application Platform continuous delivery application. For more information about using this template, see https://github.com/jboss-container-images/jboss-eap-7-openshift-image/blob/eap-cd/README.adoc",
+            "template.openshift.io/long-description": "This template defines resources needed to develop a JBoss Enterprise Application Platform continuous delivery based application, including a build configuration, application deployment configuration and secure communication using edge TLS.",
+            "template.openshift.io/documentation-url": "https://access.redhat.com/documentation/en/red-hat-jboss-enterprise-application-platform/",
+            "template.openshift.io/support-url": "https://access.redhat.com"
+        },
+        "name": "wildfly-galleon-basic-s2i"
+    },
+    "labels": {
+        "template": "wildfly-galleon-basic-s2i",
+        "xpaas": "14.0"
+    },
+    "message": "A new Wildfly server based application has been created in your project.",
+    "parameters": [
+        {
+            "displayName": "Application Name",
+            "description": "The name for the application.",
+            "name": "APPLICATION_NAME",
+            "value": "wildfly-app",
+            "required": true
+        },
+        {
+            "displayName": "Galleon Feature Pack Producer",
+            "description": "The FeaturePack location.",
+            "name": "FP_PRODUCER",
+            "value": "wildfly-servlet",
+            "required": true
+        },
+        {
+            "displayName": "Galleon Feature Pack Channel",
+            "description": "The FeaturePack location.",
+            "name": "FP_CHANNEL",
+            "value": "current",
+            "required": true
+        },
+        {
+            "displayName": "Galleon Layers",
+            "description": "The FeaturePack location.",
+            "name": "FP_LAYERS",
+            "value": "web-server",
+            "required": true
+        },
+        {
+            "displayName": "Git Repository URL",
+            "description": "Git source URI for application",
+            "name": "SOURCE_REPOSITORY_URL",
+            "value": "https://github.com/jfdenise/openshift-jee-sample.git",
+            "required": true
+        }
+    ],
+    "objects": [
+        {
+            "kind": "Service",
+            "apiVersion": "v1",
+            "spec": {
+                "ports": [
+                    {
+                        "port": 8080,
+                        "name": "http",
+                        "targetPort": 8080
+                    }
+                ],
+                "selector": {
+                    "deploymentConfig": "${APPLICATION_NAME}"
+                }
+            },
+            "metadata": {
+                "name": "${APPLICATION_NAME}",
+                "labels": {
+                    "application": "${APPLICATION_NAME}"
+                },
+                "annotations": {
+                    "description": "The web server's http port."
+                }
+            }
+        },
+        {
+            "kind": "ImageStream",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APPLICATION_NAME}",
+                "labels": {
+                    "application": "${APPLICATION_NAME}"
+                }
+            }
+        },
+        {
+            "kind": "ImageStream",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${FP_PRODUCER}-${FP_CHANNEL}",
+                "labels": {
+                    "application": "${FP_PRODUCER}-${FP_CHANNEL}"
+                }
+            }
+        },
+        {
+            "kind": "BuildConfig",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${FP_PRODUCER}-${FP_CHANNEL}",
+                "labels": {
+                    "application": "${FP_PRODUCER}-${FP_CHANNEL}"
+                }
+            },
+            "spec": {
+                "source": {
+                    "type": "Dockerfile",
+                    "dockerfile": "FROM openjdk:8-jre\nRUN useradd -r -u 1001 appuser\nRUN apt-get update -y && apt-get install maven -y\nRUN apt-get install git -y\nARG wildflyLocation\nENV WILDFLY_LOCATION=$wildflyLocation\nRUN git clone https://github.com/jfdenise/galleon-openshift/ galleon-openshift\nRUN sh /galleon-openshift/scripts/provision-server.sh\nRUN groupadd -r jboss -g 1000 && useradd -u 1000 -r -g jboss -m -d /opt/jboss -s /sbin/nologin -c \"JBoss user\" jboss && chmod 755 /opt/jboss\nEXPOSE 8080\nEXPOSE 9990\nUSER 1000"
+                },
+                "strategy": {
+                    "type": "Docker",
+                    "dockerStrategy": {
+                        "buildArgs": [
+                          {
+                            "name": "wildflyLocation",
+                            "value": "${FP_PRODUCER}@maven(org.jboss.universe:community-universe):${FP_CHANNEL}"
+                          }
+                        ]
+                    }
+                },
+                "output": {
+                    "to": {
+                        "kind": "ImageStreamTag",
+                        "name": "${FP_PRODUCER}-${FP_CHANNEL}:latest"
+                    }
+                },
+                "triggers": [
+                    {
+                        "type": "GitHub",
+                        "github": {
+                            "secret": "edCwK4v41lK8GpgU11Pc"
+                        }
+                    },
+                    {
+                        "type": "Generic",
+                        "generic": {
+                            "secret": "_bQTqwxvGQ8BTq87w5Fc"
+                        }
+                    },
+                    {
+                        "type": "ImageChange",
+                        "imageChange": {}
+                    },
+                    {
+                        "type": "ConfigChange"
+                    }
+                ]
+            }
+        },
+        {
+            "kind": "BuildConfig",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APPLICATION_NAME}",
+                "labels": {
+                    "application": "${APPLICATION_NAME}"
+                }
+            },
+            "spec": {
+                "source": {
+                    "type": "Git",
+                    "git": {
+                        "uri": "${SOURCE_REPOSITORY_URL}",
+                        "ref": "master"
+                    }
+                },
+                "strategy": {
+                    "type": "Source",
+                    "sourceStrategy": {
+                        "from": {
+                            "kind": "ImageStreamTag",
+                            "name": "${FP_PRODUCER}-${FP_CHANNEL}:latest"
+                        }
+                    }
+                },
+                "output": {
+                    "to": {
+                        "kind": "ImageStreamTag",
+                        "name": "${APPLICATION_NAME}:latest"
+                    }
+                },
+                "triggers": [
+                    {
+                        "type": "GitHub",
+                        "github": {
+                            "secret": "1549236670ccf683"
+                        }
+                    },
+                    {
+                        "type": "Generic",
+                        "generic": {
+                            "secret": "3e3d73fb33171d88"
+                        }
+                    },
+                    {
+                        "type": "ImageChange",
+                        "imageChange": {}
+                    },
+                    {
+                        "type": "ConfigChange"
+                    }
+                ]
+            }
+        },
+        {
+            "kind": "DeploymentConfig",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APPLICATION_NAME}",
+                "labels": {
+                    "application": "${APPLICATION_NAME}"
+                }
+            },
+            "spec": {
+                "strategy": {
+                    "type": "Recreate"
+                },
+                "triggers": [
+                    {
+                        "type": "ImageChange",
+                        "imageChangeParams": {
+                            "automatic": true,
+                            "containerNames": [
+                                "${APPLICATION_NAME}"
+                            ],
+                            "from": {
+                                "kind": "ImageStreamTag",
+                                "name": "${APPLICATION_NAME}:latest"
+                            }
+                        }
+                    },
+                    {
+                        "type": "ConfigChange"
+                    }
+                ],
+                "replicas": 1,
+                "selector": {
+                    "deploymentConfig": "${APPLICATION_NAME}"
+                },
+                "template": {
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}",
+                        "labels": {
+                            "deploymentConfig": "${APPLICATION_NAME}",
+                            "application": "${APPLICATION_NAME}"
+                        }
+                    },
+                    "spec": {
+                        "terminationGracePeriodSeconds": 75,
+                        "containers": [
+                            {
+                                "name": "${APPLICATION_NAME}",
+                                "image": "${APPLICATION_NAME}",
+                                "imagePullPolicy": "Always",
+                                "ports": [
+                                    {
+                                        "name": "http",
+                                        "containerPort": 8080,
+                                        "protocol": "TCP"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    ]
+}

@@ -1,0 +1,38 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  labels:
+    app: build-app-s2i
+  name: build-app-s2i
+spec:
+  nodeSelector: null
+  output:
+    to:
+      kind: ImageStreamTag
+      name: build-app-s2i:latest
+  postCommit: {}
+  resources: {}
+  runPolicy: Serial
+  source:
+    git:
+      ref: master
+      uri: https://github.com/jfdenise/openshift-jee-sample.git
+    type: Git
+  strategy:
+    sourceStrategy:
+      from:
+        kind: ImageStreamTag
+        name: wildfly-servlet-galleon:latest
+    type: Source
+  triggers:
+  - imageChange:
+    type: ImageChange
+  - type: ConfigChange
+  - generic:
+      secret: 3e3d73fb33171d88
+    type: Generic
+  - github:
+      secret: 1549236670ccf683
+    type: GitHub
+status:
+  lastVersion: 1
