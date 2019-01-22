@@ -2,12 +2,21 @@ apiVersion: v1
 kind: Template
 metadata:
   name: galleon-provisioning-app-pipeline
+  annotations:
+    iconClass: icon-wildfly
+    openshift.io/display-name: Galleon build and deploy pipeline
+    openshift.io/provider-display-name: Red Hat, Inc.
+    template.openshift.io/long-description: Pipeline to provision server, build src and deploy app.
+    description: Pipeline to provision server using galleon, build your application src and deploy application.
+  message: Pipeline created, you must start a new pipeline run.
+labels:
+  template: galleon-provisioning-app-pipeline
 parameters:
 - name: APP_NAME
   description: The name assigned to all of the application objects defined in this template.
   displayName: Application Name
   required: true
-  value: openshift-jee-sample
+  value: my-app
 - name: FP_PRODUCER
   description: The Feature-Pack producer
   displayName: The Feature-Pack producer
@@ -19,8 +28,8 @@ parameters:
   required: true
   value: current
 - name: FP_LAYERS
-  description: The features to install
-  displayName: The features to install
+  description: Comma separated list of features to install (web-server, cloud-profile, core-tools)
+  displayName: The Wildfly server features to provision (Needed by your application) 
   required: false
   value: web-server
 - name: GIT_SOURCE_URL
@@ -59,8 +68,8 @@ objects:
   kind: ImageStream
   metadata:
     labels:
-      app: ${FP_PRODUCER}-${FP_CHANNEL}
-    name: ${FP_PRODUCER}-${FP_CHANNEL}
+      app: ${APP_NAME}-${FP_PRODUCER}-${FP_CHANNEL}
+    name: ${APP_NAME}-${FP_PRODUCER}-${FP_CHANNEL}
   spec: {}
   status:
     dockerImageRepository: ""
@@ -68,8 +77,8 @@ objects:
   kind: BuildConfig
   metadata:
     labels:
-      name: provision-server-and-build-deploy-app-pipeline
-    name: provision-server-and-build-deploy-app-pipeline
+      name: ${APP_NAME}-pipeline
+    name: ${APP_NAME}-pipeline
   spec:
     strategy:
       jenkinsPipelineStrategy:
@@ -101,11 +110,11 @@ objects:
                     dir("root-context") {
                       unstash name:"server"
                     }
-                    sh "oc start-build ${producer}-${channel}-docker --from-dir=root-context --follow"
+                    sh "oc start-build ${appName}-${producer}-${channel}-docker --from-dir=root-context --follow"
                     timeout(time: 20, unit: 'MINUTES') {
                       openshift.withCluster() {
                         openshift.withProject() {
-                          def bc = openshift.selector('bc', "${producer}-${channel}-docker")
+                          def bc = openshift.selector('bc', "${appName}-${producer}-${channel}-docker")
                           echo "Found 1 ${bc.count()} buildconfig"
                           def blds = bc.related('builds')
                           blds.untilEach {
@@ -165,13 +174,13 @@ objects:
   kind: BuildConfig
   metadata:
     labels:
-      app: ${FP_PRODUCER}-${FP_CHANNEL}-docker
-    name: ${FP_PRODUCER}-${FP_CHANNEL}-docker
+      app: ${APP_NAME}-${FP_PRODUCER}-${FP_CHANNEL}-docker
+    name: ${APP_NAME}-${FP_PRODUCER}-${FP_CHANNEL}-docker
   spec:
     output:
       to:
         kind: ImageStreamTag
-        name: ${FP_PRODUCER}-${FP_CHANNEL}:latest
+        name: ${APP_NAME}-${FP_PRODUCER}-${FP_CHANNEL}:latest
     postCommit: {}
     resources: {}
     runPolicy: Serial
@@ -203,7 +212,7 @@ objects:
     runPolicy: Serial
     source:
       dockerfile: |-
-        FROM ${FP_PRODUCER}-${FP_CHANNEL}
+        FROM ${APP_NAME}-${FP_PRODUCER}-${FP_CHANNEL}
         COPY ROOT.war /wildfly/standalone/deployments/ROOT.war
         CMD ["wildfly/bin/standalone.sh", "-b", "0.0.0.0"]
       binary:
@@ -213,7 +222,7 @@ objects:
       dockerStrategy:
         from:
           kind: ImageStreamTag
-          name: ${FP_PRODUCER}-${FP_CHANNEL}:latest
+          name: ${APP_NAME}-${FP_PRODUCER}-${FP_CHANNEL}:latest
       type: Docker
     triggers: []
 - apiVersion: v1
