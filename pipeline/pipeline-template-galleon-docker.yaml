@@ -1,0 +1,100 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: galleon-docker-pipeline
+objects:
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    labels:
+      app: wildfly-server-img
+    name: wildfly-server-img
+  spec: {}
+  status:
+    dockerImageRepository: ""
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      name: build-image-pipeline
+    name: build-image-pipeline
+  spec:
+    strategy:
+      jenkinsPipelineStrategy:
+        jenkinsfile: |-
+          try {
+             timeout(time: 20, unit: 'MINUTES') {
+                def project=""
+
+                node {
+                  stage("Initialize") {
+                    project = env.PROJECT_NAME
+                  }
+                }
+
+                node("maven") {
+                  stage("Checkout") {
+                    git url: "https://github.com/jfdenise/galleon-openshift/", branch: "master"
+                  }
+                  stage("Provision Server") {
+                    sh "mvn clean package  -Dinstall.dir=wildfly -DwildflyLocation=\"wildfly-servlet@maven(org.jboss.universe:community-universe):current\""
+                    stash name:"server", includes:"wildfly/**/*"
+                  }
+                }
+
+                node {
+                  stage("Build Image") {
+                    dir("root-context") {
+                      unstash name:"server"
+                    }
+                    sh "oc start-build server-docker --from-dir=root-context --follow"
+                    timeout(time: 20, unit: 'MINUTES') {
+                      openshift.withCluster() {
+                        openshift.withProject() {
+                          def bc = openshift.selector('bc', "server-docker")
+                          echo "Found 1 ${bc.count()} buildconfig"
+                          def blds = bc.related('builds')
+                          blds.untilEach {
+                            return it.object().status.phase == "Complete"
+                          }
+                        }
+                      }  
+                    }
+                  }
+                }
+             }
+          } catch (err) {
+             echo "in catch block"
+             echo "Caught: ${err}"
+             currentBuild.result = 'FAILURE'
+             throw err
+          }
+      type: JenkinsPipeline
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      app: server-docker
+    name: server-docker
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: wildfly-server-img:latest
+    postCommit: {}
+    resources: {}
+    runPolicy: Serial
+    source:
+      dockerfile: |-
+        FROM openjdk:8-jre
+        RUN echo PWD $PWD
+        RUN echo HOME $HOME
+        COPY wildfly wildfly
+        RUN chmod -R 777 wildfly
+        EXPOSE 8080
+        CMD ["wildfly/bin/standalone.sh", "-b", "0.0.0.0"]
+      type: Docker
+    strategy:
+      dockerStrategy:
+      type: Docker
+    triggers: []

@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: docker-only-pipeline
+objects:
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    labels:
+      app: simple-docker
+    name: simple-docker
+  spec: {}
+  status:
+    dockerImageRepository: ""
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      name: docker-only
+    name: docker-only
+  spec:
+    strategy:
+      jenkinsPipelineStrategy:
+        jenkinsfile: |-
+          try {
+             timeout(time: 20, unit: 'MINUTES') {
+                def project=""
+
+                node {
+                  stage("Initialize") {
+                    project = env.PROJECT_NAME
+                  }
+                }
+
+                node {
+                  stage("Build Image") {
+                    sh "oc start-build simple-docker"
+                    timeout(time: 20, unit: 'MINUTES') {
+                      openshift.withCluster() {
+                        openshift.withProject() {
+                          def bc = openshift.selector('bc', "simple-docker")
+                          echo "Found 1 ${bc.count()} buildconfig"
+                          def blds = bc.related('builds')
+                          blds.untilEach {
+                            return it.object().status.phase == "Complete"
+                          }
+                        }
+                      }  
+                    }
+                  }
+                }
+             }
+          } catch (err) {
+             echo "in catch block"
+             echo "Caught: ${err}"
+             currentBuild.result = 'FAILURE'
+             throw err
+          }
+      type: JenkinsPipeline
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      app: simple-docker
+    name: simple-docker
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: simple-docker:latest
+    postCommit: {}
+    resources: {}
+    runPolicy: Serial
+    source:
+      dockerfile: |-
+        FROM openjdk:8-jre
+        CMD ["java", "-version"]
+      type: Docker
+    strategy:
+      dockerStrategy:
+      type: Docker
+    triggers: []

@@ -1,0 +1,210 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: galleon-provisioning-app-pipeline
+parameters:
+- name: APP_NAME
+  description: The name assigned to all of the application objects defined in this template.
+  displayName: Application Name
+  required: true
+  value: openshift-jee-sample
+- name: FP_PRODUCER
+  description: The Feature-Pack producer
+  displayName: The Feature-Pack producer
+  required: true
+  value: wildfly-servlet
+- name: FP_CHANNEL
+  description: The Feature-Pack channel
+  displayName: The Feature-Pack channel
+  required: true
+  value: current
+- name: FP_LAYERS
+  description: The features to install
+  displayName: The features to install
+  required: false
+  value: web-server
+- name: GIT_SOURCE_URL
+  description: The source URL for the application
+  displayName: Source URL
+  required: true
+  value: https://github.com/openshift/openshift-jee-sample.git
+- name: GIT_SOURCE_REF
+  description: The source Ref for the application
+  displayName: Source Ref
+  required: true
+  value: master
+- description: Github trigger secret.  A difficult to guess string encoded as part of the webhook URL.  Not encrypted.
+  displayName: GitHub Webhook Secret
+  from: '[a-zA-Z0-9]{40}'
+  generate: expression
+  name: GITHUB_WEBHOOK_SECRET
+  required: true
+- description: A secret string used to configure the Generic webhook.
+  displayName: Generic Webhook Secret
+  from: '[a-zA-Z0-9]{40}'
+  generate: expression
+  name: GENERIC_WEBHOOK_SECRET
+  required: true
+objects:
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    labels:
+      app: ${APP_NAME}
+    name: ${APP_NAME}
+  spec: {}
+  status:
+    dockerImageRepository: ""
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    labels:
+      app: ${FP_PRODUCER}-${FP_CHANNEL}
+    name: ${FP_PRODUCER}-${FP_CHANNEL}
+  spec: {}
+  status:
+    dockerImageRepository: ""
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      name: provision-server-and-build-deploy-app-pipeline
+    name: provision-server-and-build-deploy-app-pipeline
+  spec:
+    strategy:
+      jenkinsPipelineStrategy:
+        jenkinsfile: |-
+          try {
+             timeout(time: 20, unit: 'MINUTES') {
+                def project=""
+                def appName="${APP_NAME}"
+                def producer="${FP_PRODUCER}"
+                def channel="${FP_CHANNEL}"
+                node {
+                  stage("Initialize") {
+                    project = env.PROJECT_NAME
+                  }
+                }
+
+                node("maven") {
+                  stage("Checkout Galleon") {
+                    git url: "https://github.com/jfdenise/galleon-openshift/", branch: "master"
+                  }
+                  stage("Provision Server") {
+                    sh "mvn clean package  -Dinstall.dir=wildfly -DwildflyLocation=\"${producer}@maven(org.jboss.universe:community-universe):${channel}\""
+                    stash name:"server", includes:"wildfly/**/*"
+                  }
+                }
+
+                node {
+                  stage("Build Server Image") {
+                    dir("root-context") {
+                      unstash name:"server"
+                    }
+                    sh "oc start-build ${producer}-${channel}-docker --from-dir=root-context --follow"
+                    timeout(time: 20, unit: 'MINUTES') {
+                      openshift.withCluster() {
+                        openshift.withProject() {
+                          def bc = openshift.selector('bc', "${producer}-${channel}-docker")
+                          echo "Found 1 ${bc.count()} buildconfig"
+                          def blds = bc.related('builds')
+                          blds.untilEach {
+                            return it.object().status.phase == "Complete"
+                          }
+                        }
+                      }  
+                    }
+                  }
+                }
+
+                node("maven") {
+                  stage("Checkout ${APP_NAME} sources") {
+                    git url: "${GIT_SOURCE_URL}", branch: "${GIT_SOURCE_REF}"
+                  }
+                  stage("Build WAR") {
+                    sh "mvn clean package -Popenshift"
+                    stash name:"war", includes:"target/ROOT.war"
+                  }
+                }
+
+                node {
+                  stage("Build ${APP_NAME} Image") {
+                    unstash name:"war"
+                    sh "oc start-build ${appName}-docker --from-file=target/ROOT.war -n ${project}"
+                    timeout(time: 20, unit: 'MINUTES') {
+                      openshift.withCluster() {
+                        openshift.withProject() {
+                          def bc = openshift.selector('bc', "${appName}-docker")
+                          echo "Found 1 ${bc.count()} buildconfig"
+                          def blds = bc.related('builds')
+                          blds.untilEach {
+                            return it.object().status.phase == "Complete"
+                          }
+                        }
+                      }  
+                    }
+                  }
+                }
+             }
+          } catch (err) {
+             echo "in catch block"
+             echo "Caught: ${err}"
+             currentBuild.result = 'FAILURE'
+             throw err
+          }
+      type: JenkinsPipeline
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      app: ${FP_PRODUCER}-${FP_CHANNEL}-docker
+    name: ${FP_PRODUCER}-${FP_CHANNEL}-docker
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${FP_PRODUCER}-${FP_CHANNEL}:latest
+    postCommit: {}
+    resources: {}
+    runPolicy: Serial
+    source:
+      dockerfile: |-
+        FROM openjdk:8-jre
+        COPY wildfly wildfly
+        RUN chmod -R 777 wildfly
+        EXPOSE 8080
+        CMD ["wildfly/bin/standalone.sh", "-b", "0.0.0.0"]
+      type: Docker
+    strategy:
+      dockerStrategy:
+      type: Docker
+    triggers: []
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      app: ${APP_NAME}-docker
+    name: ${APP_NAME}-docker
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${APP_NAME}:latest
+    postCommit: {}
+    resources: {}
+    runPolicy: Serial
+    source:
+      dockerfile: |-
+        FROM ${FP_PRODUCER}-${FP_CHANNEL}
+        COPY ROOT.war /wildfly/standalone/deployments/ROOT.war
+        CMD ["wildfly/bin/standalone.sh", "-b", "0.0.0.0"]
+      binary:
+        asFile: ROOT.war
+      type: Docker
+    strategy:
+      dockerStrategy:
+        from:
+          kind: ImageStreamTag
+          name: ${FP_PRODUCER}-${FP_CHANNEL}:latest
+      type: Docker
+    triggers: []
