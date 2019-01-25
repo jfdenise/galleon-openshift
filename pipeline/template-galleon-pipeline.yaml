@@ -1,0 +1,122 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: galleon-pipeline
+  annotations:
+    iconClass: icon-wildfly
+    openshift.io/display-name: Galleon pipeline.
+    openshift.io/provider-display-name: Red Hat, Inc.
+    template.openshift.io/long-description: Pipeline to builder Wildfly server image using galleon.
+    description: Pipeline to builder Wildfly server image using galleon.
+  message: Pipeline created, you must start a new pipeline run.
+labels:
+  template: galleon-pipeline
+parameters:
+- name: IMAGE_NAME
+  description: The built image name. Name is assigned to all of the application objects defined in this template.
+  displayName: Image Name
+  required: true
+  value: my-server
+- name: FP_PRODUCER
+  description: The Feature-Pack producer
+  displayName: The Feature-Pack producer
+  required: true
+  value: wildfly-servlet
+- name: FP_CHANNEL
+  description: The Feature-Pack channel
+  displayName: The Feature-Pack channel
+  required: true
+  value: current
+- name: FP_LAYERS
+  description: Comma separated list of features to install (web-server, cloud-profile, core-tools)
+  displayName: The Wildfly server features to provision (Needed by your application) 
+  required: false
+  value: web-server
+objects:
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    labels:
+      app: ${IMAGE_NAME}
+    name: ${IMAGE_NAME}
+  spec: {}
+  status:
+    dockerImageRepository: ""
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      name: ${IMAGE_NAME}-pipeline
+    name: ${IMAGE_NAME}-pipeline
+  spec:
+    strategy:
+      jenkinsPipelineStrategy:
+        jenkinsfile: |-
+          try {
+             timeout(time: 20, unit: 'MINUTES') {
+                def project=""
+                def imgName="${IMAGE_NAME}"
+                def producer="${FP_PRODUCER}"
+                def channel="${FP_CHANNEL}"
+                node {
+                  stage("Initialize") {
+                    project = env.PROJECT_NAME
+                  }
+                }
+                node("maven") {
+                  stage("Checkout Galleon") {
+                    git url: "https://github.com/jfdenise/galleon-openshift/", branch: "master"
+                  }
+                  stage("Provision Server") {
+                    sh "mvn clean package  -Dinstall.dir=root-context/wildfly -DwildflyLocation=\"${producer}@maven(org.jboss.universe:community-universe):${channel}\""
+                  }
+                  stage("Build Server Image") {
+                    sh "oc start-build ${imgName}-docker --from-dir=root-context --follow"
+                    timeout(time: 20, unit: 'MINUTES') {
+                      openshift.withCluster() {
+                        openshift.withProject() {
+                          def bc = openshift.selector('bc', "${imgName}-docker")
+                          echo "Found 1 ${bc.count()} buildconfig"
+                          def blds = bc.related('builds')
+                          blds.untilEach {
+                            return it.object().status.phase == "Complete"
+                          }
+                        }
+                      }  
+                    }
+                  }
+               }
+             }
+          } catch (err) {
+             echo "in catch block"
+             echo "Caught: ${err}"
+             currentBuild.result = 'FAILURE'
+             throw err
+          }
+      type: JenkinsPipeline
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      app: ${IMAGE_NAME}-docker
+    name: ${IMAGE_NAME}-docker
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${IMAGE_NAME}:latest
+    postCommit: {}
+    resources: {}
+    runPolicy: Serial
+    source:
+      dockerfile: |-
+        FROM openjdk:8-jre
+        COPY wildfly wildfly
+        RUN chmod -R 777 wildfly
+        EXPOSE 8080
+        CMD ["wildfly/bin/standalone.sh", "-b", "0.0.0.0"]
+      type: Docker
+    strategy:
+      dockerStrategy:
+      type: Docker
+    triggers: []
