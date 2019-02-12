@@ -36,7 +36,7 @@ parameters:
   description: The database jdbc URL.
   displayName: jdbc URL
   required: true
-  value: jdbc:postgresql://<host>:5432/demo
+  value: jdbc:postgresql://postgresql:5432/demo
 - name: DB_NAME
   description: The database user name
   displayName: Database user name
@@ -94,11 +94,11 @@ objects:
         FROM openjdk:8-jdk
         RUN apt-get update -y && apt-get install maven -y
         RUN apt-get install git -y
-        RUN wget https://github.com/wildfly/galleon/releases/download/3.0.1.CR2/galleon-3.0.1.CR2.zip
-        RUN unzip galleon-3.0.1.CR2.zip
-        RUN galleon-3.0.1.CR2/bin/galleon.sh install ${FP_PRODUCER}:${FP_CHANNEL} --dir=/wildfly --default-configs=standalone/standalone.xml
-        RUN wget https://github.com/jfdenise/galleon-openshift/demo-openshift/postgresql-1.0.zip
-        RUN galleon-3.0.1.CR2/bin/galleon.sh install --file=./postgresql-1.0.zip --dir=/wildfly
+        RUN wget https://github.com/jfdenise/galleon-openshift/releases/download/1.0/galleon-3.0.1.Final-SNAPSHOT.zip
+        RUN unzip galleon-3.0.1.Final-SNAPSHOT.zip
+        RUN galleon-3.0.1.Final-SNAPSHOT/bin/galleon.sh install ${FP_PRODUCER}:${FP_CHANNEL} --dir=/wildfly --default-configs=standalone/standalone.xml
+        RUN wget https://github.com/jfdenise/galleon-openshift/releases/download/1.0/postgresql-1.0.zip
+        RUN galleon-3.0.1.Final-SNAPSHOT/bin/galleon.sh install --file=./postgresql-1.0.zip --dir=/wildfly
         RUN chmod -R 777 /wildfly
         RUN groupadd -r jboss -g 1000 && useradd -u 1000 -r -g jboss -m -d /opt/jboss -s /sbin/nologin -c "JBoss user" jboss && chmod 755 /opt/jboss
         USER 1000
