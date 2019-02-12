@@ -14,4 +14,4 @@ mvn clean package -Popenshift -DskipTests
 cp $local_source_dir/target/ROOT.war /wildfly/standalone/deployments/ROOT.war
 
 # Configure the server
-/wildfly/bin/jboss-cli.sh --file=../../jboss-cli-script.txt
+/wildfly/bin/jboss-cli.sh --file=jboss-cli-script.txt
