@@ -127,7 +127,7 @@ objects:
       git:
         ref: master
         uri: https://github.com/jfdenise/galleon-openshift.git
-      contextDir: demo-app
+      contextDir: demo-openshift/demo-app
       type: Git
     strategy:
       sourceStrategy:
