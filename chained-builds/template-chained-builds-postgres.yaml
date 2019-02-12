@@ -1,0 +1,289 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: galleon-chained-build
+  annotations:
+    iconClass: icon-wildfly
+    openshift.io/display-name: Galleon S2I chained build
+    openshift.io/provider-display-name: Red Hat, Inc.
+    template.openshift.io/long-description: Chained build to provision Wildfly server image using galleon and build/deploy app.
+    description: Chained build to provision Wildfly server image using galleon and build/deploy app.
+  message: Builds created.
+labels:
+  template: galleon-chained-build
+parameters:
+- name: APP_NAME
+  description: The application name. Name is assigned to all of the application objects defined in this template.
+  displayName: Image Name
+  required: true
+  value: my-app
+- name: FP_PRODUCER
+  description: The Feature-Pack producer
+  displayName: The Feature-Pack producer
+  required: true
+  value: wildfly-servlet
+- name: FP_CHANNEL
+  description: The Feature-Pack channel
+  displayName: The Feature-Pack channel
+  required: true
+  value: current
+- name: FP_LAYERS
+  description: Comma separated list of features to install (web-server, cloud-profile, core-tools)
+  displayName: The Wildfly server features to provision (Needed by your application) 
+  required: false
+  value: web-server
+- name: DB_URL_CONNECTION
+  description: The database jdbc URL.
+  displayName: jdbc URL
+  required: true
+  value: jdbc:postgresql://<host>:5432/demo
+- name: DB_NAME
+  description: The database user name
+  displayName: Database user name
+  required: true
+  value: demo
+- name: DB_PASSWORD
+  description: The database user password
+  displayName: Database user password
+  required: true
+  value: demo
+objects:
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    labels:
+      app: ${APP_NAME}-server-builder
+    name: ${APP_NAME}-server-builder
+  spec: {}
+  status:
+    dockerImageRepository: ""
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    labels:
+      app: ${APP_NAME}-artifact-builder
+    name: ${APP_NAME}-artifact-builder
+  spec: {}
+  status:
+    dockerImageRepository: ""
+- apiVersion: v1
+  kind: ImageStream
+  metadata:
+    labels:
+      app: ${APP_NAME}
+    name: ${APP_NAME}
+  spec: {}
+  status:
+    dockerImageRepository: ""
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      app: ${APP_NAME}-server-builder
+    name: ${APP_NAME}-server-builder
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${APP_NAME}-server-builder:latest
+    postCommit: {}
+    resources: {}
+    runPolicy: Serial
+    source:
+      dockerfile: |-
+        FROM openjdk:8-jdk
+        RUN apt-get update -y && apt-get install maven -y
+        RUN apt-get install git -y
+        RUN wget https://github.com/wildfly/galleon/releases/download/3.0.1.CR2/galleon-3.0.1.CR2.zip
+        RUN unzip galleon-3.0.1.CR2.zip
+        RUN galleon-3.0.1.CR2/bin/galleon.sh install ${FP_PRODUCER}:${FP_CHANNEL} --dir=/wildfly --default-configs=standalone/standalone.xml
+        RUN wget https://github.com/jfdenise/galleon-openshift/demo-openshift/postgresql-1.0.zip
+        RUN galleon-3.0.1.CR2/bin/galleon.sh install --file=./postgresql-1.0.zip --dir=/wildfly
+        RUN chmod -R 777 /wildfly
+        RUN groupadd -r jboss -g 1000 && useradd -u 1000 -r -g jboss -m -d /opt/jboss -s /sbin/nologin -c "JBoss user" jboss && chmod 755 /opt/jboss
+        USER 1000
+      type: Docker
+    strategy:
+      dockerStrategy:
+      type: Docker
+    triggers:
+    - type: ConfigChange
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      app: ${APP_NAME}-artifact-builder
+    name: ${APP_NAME}-artifact-builder
+  spec:
+    nodeSelector: null
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${APP_NAME}-artifact-builder:latest
+    postCommit: {}
+    resources: {}
+    runPolicy: Serial
+    source:
+      git:
+        ref: master
+        uri: https://github.com/jfdenise/galleon-openshift.git
+      contextDir: demo-app
+      type: Git
+    strategy:
+      sourceStrategy:
+        from:
+          kind: ImageStreamTag
+          name: ${APP_NAME}-server-builder:latest
+      type: Source
+    triggers:
+    - imageChange:
+      type: ImageChange
+    - type: ConfigChange
+    - generic:
+        secret: 3e3d73fb33171d88
+      type: Generic
+    - github:
+      secret: 1549236670ccf683
+    type: GitHub
+  status:
+    lastVersion: 1
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    name: ${APP_NAME}
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${APP_NAME}:latest
+    source:
+      dockerfile: |-
+        FROM openjdk:8-jre
+        COPY wildfly /wildfly
+        RUN chmod -R 777 /wildfly
+        ENV DB_URL_CONNECTION=${DB_URL_CONNECTION}
+        ENV DB_USER=${DB_USER}
+        ENV DB_PASSWORD=${DB_PASSWORD}
+        EXPOSE 8080
+        CMD ["/wildfly/bin/standalone.sh", "-b", "0.0.0.0"]
+      images:
+        - from: 
+            kind: ImageStreamTag
+            name: ${APP_NAME}-artifact-builder:latest
+          paths: 
+          - sourcePath: /wildfly
+            destinationDir: "."
+    strategy:
+      dockerStrategy:
+      type: Docker
+    triggers:
+    - imageChange:
+        from:
+          kind: ImageStreamTag
+          name: ${APP_NAME}-artifact-builder:latest
+      type: ImageChange
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    labels:
+      app: ${APP_NAME}
+    name: ${APP_NAME}
+  spec:
+    replicas: 1
+    selector:
+      app: ${APP_NAME}
+      deploymentconfig: ${APP_NAME}
+    strategy:
+      rollingParams:
+        intervalSeconds: 1
+        maxSurge: 25%
+        maxUnavailable: 25%
+        timeoutSeconds: 600
+        updatePeriodSeconds: 1
+      type: Rolling
+    template:
+      metadata:
+        labels:
+          app: ${APP_NAME}
+          deploymentconfig: ${APP_NAME}
+      spec:
+        containers:
+        - image: ${APP_NAME}:latest
+          imagePullPolicy: Always
+          name: ${APP_NAME}
+          ports:
+          - containerPort: 8080
+            protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 10
+            timeoutSeconds: 2
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 30
+            timeoutSeconds: 2
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+    test: false
+    triggers:
+    - type: ConfigChange
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - ${APP_NAME}
+        from:
+          kind: ImageStreamTag
+          name: ${APP_NAME}:latest
+      type: ImageChange
+  status: {}
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      openshift.io/generated-by: OpenShiftNewApp
+    labels:
+      app: ${APP_NAME}
+    name: ${APP_NAME}
+  spec:
+    ports:
+    - name: 8080-tcp
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+    selector:
+      app: ${APP_NAME}
+      deploymentconfig: ${APP_NAME}
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
+- apiVersion: v1
+  kind: Route
+  metadata:
+    name: ${APP_NAME}
+    labels:
+      app: ${APP_NAME}
+  spec:
+    to:
+      kind: Service
+      name: ${APP_NAME}
+      weight: 100
+    port:
+      targetPort: 8080-tcp
+    wildcardPolicy: None

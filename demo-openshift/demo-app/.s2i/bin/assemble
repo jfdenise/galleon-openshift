@@ -1,0 +1,17 @@
+#!/bin/bash 
+echo S2I assembling JF DENISE
+echo PWD: $PWD
+echo HOME : $HOME
+# Source code provided to STI will be bind-mounted at /tmp/src
+# and then copied into /opt/wildfly/source for building.
+local_source_dir=$HOME/git-src
+mkdir -p $local_source_dir
+
+# Copy the source from the bind mount in preparation for compilation
+cp -ad /tmp/src/* $local_source_dir
+cd $local_source_dir
+mvn clean package -Popenshift -DskipTests
+cp $local_source_dir/target/ROOT.war /wildfly/standalone/deployments/ROOT.war
+
+# Configure the server
+/wildfly/bin/jboss-cli.sh --file=../../jboss-cli-script.txt

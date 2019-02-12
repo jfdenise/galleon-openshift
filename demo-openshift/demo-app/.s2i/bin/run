@@ -1,0 +1,4 @@
+#!/bin/bash
+# Useless, not run.
+echo USELESS, NOT BE CALLED
+exec /wildfly-core/bin/standalone.sh -b 0.0.0.0 -bmanagement 0.0.0.0
