@@ -21,7 +21,7 @@ parameters:
   description: The Feature-Pack producer
   displayName: The Feature-Pack producer
   required: true
-  value: wildfly-servlet
+  value: wildfly
 - name: FP_CHANNEL
   description: The Feature-Pack channel
   displayName: The Feature-Pack channel
@@ -37,7 +37,7 @@ parameters:
   displayName: jdbc URL
   required: true
   value: jdbc:postgresql://postgresql:5432/demo
-- name: DB_NAME
+- name: DB_USER
   description: The database user name
   displayName: Database user name
   required: true
@@ -96,9 +96,9 @@ objects:
         RUN apt-get install git -y
         RUN wget https://github.com/jfdenise/galleon-openshift/releases/download/1.0/galleon-3.0.1.Final-SNAPSHOT.zip
         RUN unzip galleon-3.0.1.Final-SNAPSHOT.zip
-        RUN galleon-3.0.1.Final-SNAPSHOT/bin/galleon.sh install ${FP_PRODUCER}:${FP_CHANNEL} --dir=/wildfly --default-configs=standalone/standalone.xml
+        RUN galleon-3.0.1.Final-SNAPSHOT/bin/galleon.sh install ${FP_PRODUCER}:${FP_CHANNEL} --dir=/wildfly --default-configs=standalone/standalone.xml --verbose
         RUN wget https://github.com/jfdenise/galleon-openshift/releases/download/1.0/postgresql-1.0.zip
-        RUN galleon-3.0.1.Final-SNAPSHOT/bin/galleon.sh install --file=./postgresql-1.0.zip --dir=/wildfly
+        RUN galleon-3.0.1.Final-SNAPSHOT/bin/galleon.sh install --file=./postgresql-1.0.zip --dir=/wildfly --verbose
         RUN chmod -R 777 /wildfly
         RUN groupadd -r jboss -g 1000 && useradd -u 1000 -r -g jboss -m -d /opt/jboss -s /sbin/nologin -c "JBoss user" jboss && chmod 755 /opt/jboss
         USER 1000
@@ -165,7 +165,8 @@ objects:
         ENV DB_USER=${DB_USER}
         ENV DB_PASSWORD=${DB_PASSWORD}
         EXPOSE 8080
-        CMD ["/wildfly/bin/standalone.sh", "-b", "0.0.0.0"]
+        EXPOSE 9990
+        CMD ["/wildfly/bin/standalone.sh", "-b", "0.0.0.0", "-bmanagement", "0.0.0.0"]
       images:
         - from: 
             kind: ImageStreamTag
@@ -214,12 +215,14 @@ objects:
           ports:
           - containerPort: 8080
             protocol: TCP
+          - containerPort: 9990
+            protocol: TCP
           resources: {}
           terminationMessagePath: /dev/termination-log
           livenessProbe:
             httpGet:
-              path: /
-              port: 8080
+              path: /health
+              port: 9990
               scheme: HTTP
             initialDelaySeconds: 10
             timeoutSeconds: 2
@@ -228,8 +231,8 @@ objects:
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /
-              port: 8080
+              path: /health
+              port: 9990
               scheme: HTTP
             initialDelaySeconds: 30
             timeoutSeconds: 2
