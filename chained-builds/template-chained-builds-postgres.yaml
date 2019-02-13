@@ -17,6 +17,21 @@ parameters:
   displayName: Image Name
   required: true
   value: my-app
+- name: GIT_REPO
+  description: The application git repository
+  displayName: git repository
+  required: true
+  value: https://github.com/jfdenise/galleon-openshift.git
+- name: GIT_CONTEXT_DIR
+  description: The application git repository sub directory
+  displayName: git repository sub directory
+  required: false
+  value: demo-openshift/demo-app
+- name: GIT_BRANCH
+  description: The application git branch
+  displayName: git branch
+  required: true
+  value: master
 - name: FP_PRODUCER
   description: The Feature-Pack producer
   displayName: The Feature-Pack producer
@@ -48,6 +63,14 @@ parameters:
   required: true
   value: demo
 objects:
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: '${APP_NAME}-db-secret'
+  stringData:
+    database-url: '${DB_URL_CONNECTION}'
+    database-password: '${DB_PASSWORD}'
+    database-user: '${DB_USER}'
 - apiVersion: v1
   kind: ImageStream
   metadata:
@@ -125,9 +148,9 @@ objects:
     runPolicy: Serial
     source:
       git:
-        ref: master
-        uri: https://github.com/jfdenise/galleon-openshift.git
-      contextDir: demo-openshift/demo-app
+        ref: ${GIT_BRANCH}
+        uri: ${GIT_REPO}
+      contextDir: ${GIT_CONTEXT_DIR}
       type: Git
     strategy:
       sourceStrategy:
@@ -161,9 +184,6 @@ objects:
         FROM openjdk:8-jre
         COPY wildfly /wildfly
         RUN chmod -R 777 /wildfly
-        ENV DB_URL_CONNECTION=${DB_URL_CONNECTION}
-        ENV DB_USER=${DB_USER}
-        ENV DB_PASSWORD=${DB_PASSWORD}
         EXPOSE 8080
         EXPOSE 9990
         CMD ["/wildfly/bin/standalone.sh", "-b", "0.0.0.0", "-bmanagement", "0.0.0.0"]
@@ -209,7 +229,23 @@ objects:
           deploymentconfig: ${APP_NAME}
       spec:
         containers:
-        - image: ${APP_NAME}:latest
+        - env:
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                key: database-user
+                name: '${APP_NAME}-db-secret'
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                key: database-password
+                name: '${APP_NAME}-db-secret'
+          - name: DB_URL_CONNECTION
+            valueFrom:
+              secretKeyRef:
+                key: database-url
+                name: '${APP_NAME}-db-secret'
+          image: ${APP_NAME}:latest
           imagePullPolicy: Always
           name: ${APP_NAME}
           ports:
@@ -283,6 +319,7 @@ objects:
     labels:
       app: ${APP_NAME}
   spec:
+    path: /tasks/title
     to:
       kind: Service
       name: ${APP_NAME}
