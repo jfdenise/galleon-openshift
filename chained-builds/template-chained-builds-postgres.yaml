@@ -123,7 +123,7 @@ objects:
         RUN wget https://github.com/jfdenise/galleon-openshift/releases/download/1.0/postgresql-1.0.zip
         RUN galleon-3.0.1.Final-SNAPSHOT/bin/galleon.sh install --file=./postgresql-1.0.zip --dir=/wildfly --verbose
         RUN chmod -R 777 /wildfly
-        RUN groupadd -r jboss -g 1000 && useradd -u 1000 -r -g jboss -m -d /opt/jboss -s /sbin/nologin -c "JBoss user" jboss && chmod 755 /opt/jboss
+        RUN groupadd -r wildfly -g 1000 && useradd -u 1000 -r -g wildfly -m -d /opt/wildfly -s /sbin/nologin -c "Wildfly user" wildfly && chmod 755 /opt/wildfly
         USER 1000
       type: Docker
     strategy:
@@ -182,11 +182,15 @@ objects:
     source:
       dockerfile: |-
         FROM openjdk:8-jre
-        COPY wildfly /wildfly
-        RUN chmod -R 777 /wildfly
+        RUN groupadd -r wildfly -g 1000 && useradd -u 1000 -r -g wildfly -m -d /opt/wildfly -s /sbin/nologin -c "Wildfly user" wildfly && chmod 755 /opt/wildfly
+        COPY wildfly /opt/wildfly/wildfly
+        RUN rm -rf /opt/wildfly/wildfly/standalone/configuration/standalone_xml_history/current
+        RUN chmod -R 777 /opt/wildfly/wildfly/standalone
+        RUN chown -R wildfly /opt/wildfly/wildfly
+        USER wildfly
         EXPOSE 8080
         EXPOSE 9990
-        CMD ["/wildfly/bin/standalone.sh", "-b", "0.0.0.0", "-bmanagement", "0.0.0.0"]
+        CMD ["/opt/wildfly/wildfly/bin/standalone.sh", "-b", "0.0.0.0", "-bmanagement", "0.0.0.0"]
       images:
         - from: 
             kind: ImageStreamTag
