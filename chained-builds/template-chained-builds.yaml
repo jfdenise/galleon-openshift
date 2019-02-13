@@ -17,6 +17,21 @@ parameters:
   displayName: Image Name
   required: true
   value: my-app
+- name: GIT_REPO
+  description: The application git repository
+  displayName: git repository
+  required: true
+  value: https://github.com/jfdenise/openshift-jee-sample.git
+- name: GIT_CONTEXT_DIR
+  description: The application git repository sub directory
+  displayName: git repository sub directory
+  required: false
+  value:
+- name: GIT_BRANCH
+  description: The application git branch
+  displayName: git branch
+  required: true
+  value: master
 - name: FP_PRODUCER
   description: The Feature-Pack producer
   displayName: The Feature-Pack producer
@@ -79,11 +94,11 @@ objects:
         FROM openjdk:8-jdk
         RUN apt-get update -y && apt-get install maven -y
         RUN apt-get install git -y
-        RUN wget https://github.com/wildfly/galleon/releases/download/3.0.1.CR2/galleon-3.0.1.CR2.zip
-        RUN unzip galleon-3.0.1.CR2.zip
-        RUN galleon-3.0.1.CR2/bin/galleon.sh install ${FP_PRODUCER}:${FP_CHANNEL} --dir=/wildfly --default-configs=standalone/standalone.xml
+        RUN wget https://github.com/jfdenise/galleon-openshift/releases/download/1.0/galleon-3.0.1.Final-SNAPSHOT.zip
+        RUN unzip galleon-3.0.1.Final-SNAPSHOT.zip
+        RUN galleon-3.0.1.Final-SNAPSHOT/bin/galleon.sh install ${FP_PRODUCER}:${FP_CHANNEL} --dir=/wildfly --default-configs=standalone/standalone.xml --verbose
         RUN chmod -R 777 /wildfly
-        RUN groupadd -r jboss -g 1000 && useradd -u 1000 -r -g jboss -m -d /opt/jboss -s /sbin/nologin -c "JBoss user" jboss && chmod 755 /opt/jboss
+        RUN groupadd -r wildfly -g 1000 && useradd -u 1000 -r -g wildfly -m -d /opt/wildfly -s /sbin/nologin -c "Wildfly user" wildfly && chmod 755 /opt/wildfly
         USER 1000
       type: Docker
     strategy:
@@ -108,8 +123,9 @@ objects:
     runPolicy: Serial
     source:
       git:
-        ref: master
-        uri: https://github.com/jfdenise/openshift-jee-sample.git
+        ref: ${GIT_BRANCH}
+        uri: ${GIT_REPO}
+      contextDir: ${GIT_CONTEXT_DIR}
       type: Git
     strategy:
       sourceStrategy:
@@ -141,10 +157,14 @@ objects:
     source:
       dockerfile: |-
         FROM openjdk:8-jre
-        COPY wildfly /wildfly
-        RUN chmod -R 777 /wildfly
+        RUN groupadd -r wildfly -g 1000 && useradd -u 1000 -r -g wildfly -m -d /opt/wildfly -s /sbin/nologin -c "Wildfly user" wildfly && chmod 755 /opt/wildfly
+        COPY wildfly /opt/wildfly/wildfly
+        RUN rm -rf /opt/wildfly/wildfly/standalone/configuration/standalone_xml_history/current
+        RUN chmod -R 777 /opt/wildfly/wildfly/standalone
+        RUN chown -R wildfly /opt/wildfly/wildfly
+        USER wildfly
         EXPOSE 8080
-        CMD ["/wildfly/bin/standalone.sh", "-b", "0.0.0.0"]
+        CMD ["/opt/wildfly/wildfly/bin/standalone.sh", "-b", "0.0.0.0"]
       images:
         - from: 
             kind: ImageStreamTag

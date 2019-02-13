@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: BuildConfig
+metadata:
+  name: my-app
+spec:
+  output:
+    to:
+      kind: ImageStreamTag
+      name: my-app:latest
+  source:
+    dockerfile: |-
+      FROM openjdk:8-jre
+      RUN groupadd -r wildfly -g 1000 && useradd -u 1000 -r -g wildfly -m -d /opt/wildfly -s /sbin/nologin -c "Wildfly user" wildfly && chmod 755 /opt/wildfly
+      COPY wildfly /opt/wildfly/wildfly
+      RUN rm -rf /opt/wildfly/wildfly/standalone/configuration/standalone_xml_history/current
+      RUN chmod -R 777 /opt/wildfly/wildfly/standalone
+      RUN chown -R wildfly /opt/wildfly/wildfly
+      USER wildfly
+      EXPOSE 8080
+      EXPOSE 9990
+      CMD ["/opt/wildfly/wildfly/bin/standalone.sh", "-b", "0.0.0.0", "-bmanagement", "0.0.0.0"]
+    images:
+      - from: 
+          kind: ImageStreamTag
+          name: my-app-artifact-builder:latest
+        paths: 
+        - sourcePath: /wildfly
+          destinationDir: "."
+  strategy:
+    dockerStrategy:
+    type: Docker
+  triggers:
+  - imageChange:
+      from:
+        kind: ImageStreamTag
+        name: my-app-artifact-builder:latest
+    type: ImageChange
