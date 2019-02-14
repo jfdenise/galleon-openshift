@@ -3,7 +3,13 @@
 <installation xmlns="urn:jboss:galleon:provisioning:3.0">
     <feature-pack location="wildfly@maven(org.jboss.universe:community-universe):current/snapshot">
         <default-configs inherit="false"/>
-        <packages inherit="false"/>
+        <packages inherit="false">
+            <!-- brings nearly 15 MB -->
+            <exclude name="org.jboss.weld.probe"/>
+            <exclude name="org.hibernate.search.orm"/>
+            <exclude name="org.jboss.resteasy.resteasy-crypto"/>
+            <exclude name="org.jboss.resteasy.resteasy-multipart-provider"/>
+        </packages> 
     </feature-pack>
     <feature-pack location="org.jboss.galleon.demo:postgresql@galleon1:1#1.0"/>
     <config model="standalone" name="standalone.xml">
