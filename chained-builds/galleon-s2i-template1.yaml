@@ -21,12 +21,12 @@ parameters:
   description: The application git repository
   displayName: git repository
   required: true
-  value: https://github.com/openshift/openshift-jee-sample
+  value: https://github.com/jorgemoralespou/s2i-wildfly-galleon
 - name: GIT_CONTEXT_DIR
   description: The application git repository sub directory
   displayName: git repository sub directory
   required: false
-  value: 
+  value: test/test-app
 - name: GIT_BRANCH
   description: The application git branch
   displayName: git branch
@@ -105,13 +105,13 @@ objects:
             kind: ImageStreamTag
             name: ${APP_NAME}-app:latest
           paths: 
-          - sourcePath: /opt/wildfly
+          - sourcePath: /output/wildfly
             destinationDir: "."
         - from: 
             kind: ImageStreamTag
             name: ${APP_NAME}-app:latest
           paths: 
-          - sourcePath: /wildfly/standalone/deployments/ROOT.war
+          - sourcePath: /output/deployments/ROOT.war
             destinationDir: "."
     strategy:
       dockerStrategy:
