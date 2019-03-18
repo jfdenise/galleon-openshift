@@ -28,26 +28,6 @@
     <name>Provision WildFly</name>
   
     <description>Provision WildFly</description>
-    <dependencies>
-        <dependency>
-            <groupId>org.wildfly</groupId>
-            <artifactId>wildfly-galleon-pack</artifactId>
-            <version>${version.org.wildfly}</version>
-            <type>zip</type>
-        </dependency>
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>mysql-datasource</artifactId>
-            <version>${project.version}</version>
-            <type>zip</type>
-        </dependency>
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>postgresql-datasource</artifactId>
-            <version>${project.version}</version>
-            <type>zip</type>
-        </dependency>
-    </dependencies>
     <licenses>
         <license>
             <name>Apache License, Version 2.0</name>
@@ -55,6 +35,13 @@
             <distribution>repo</distribution>
         </license>
     </licenses>
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>openshift-wildfly</artifactId>
+            <type>zip</type>
+        </dependency>
+    </dependencies>
     <build>                
         <plugins>
             <plugin>
@@ -101,6 +88,7 @@
                             <record-state>true</record-state>
                             <plugin-options>
                                 <jboss-maven-dist/>
+                                <jboss-fork-embedded>true</jboss-fork-embedded>
                             </plugin-options>
                             <feature-packs>
                                 <feature-pack>
@@ -110,16 +98,10 @@
                                 </feature-pack>
                                 <feature-pack>
                                     <groupId>${project.groupId}</groupId>
-                                    <artifactId>mysql-datasource</artifactId>
-                                    <version>${project.version}</version>
-                                </feature-pack>
-                                <feature-pack>
-                                    <groupId>${project.groupId}</groupId>
-                                    <artifactId>postgresql-datasource</artifactId>
+                                    <artifactId>openshift-wildfly</artifactId>
                                     <version>${project.version}</version>
                                 </feature-pack>
                             </feature-packs>
-                            <customConfig>config.xml</customConfig>
                         </configuration>
                     </execution>
                 </executions>

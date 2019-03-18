@@ -45,10 +45,7 @@
     
     <modules>
         <module>build</module>
-        <module>mysql-datasource</module>
-        <module>mysql-driver</module>
-        <module>postgresql-datasource</module>
-        <module>postgresql-driver</module>
+        <module>openshift-wildfly</module>
     </modules>
     
     <dependencyManagement>
@@ -61,25 +58,7 @@
             </dependency>
             <dependency>
                 <groupId>${project.groupId}</groupId>
-                <artifactId>mysql-driver</artifactId>
-                <version>${project.version}</version>
-                <type>zip</type>
-            </dependency>
-            <dependency>
-                <groupId>${project.groupId}</groupId>
-                <artifactId>postgresql-driver</artifactId>
-                <version>${project.version}</version>
-                <type>zip</type>
-            </dependency>
-            <dependency>
-                <groupId>${project.groupId}</groupId>
-                <artifactId>mysql-datasource</artifactId>
-                <version>${project.version}</version>
-                <type>zip</type>
-            </dependency>
-            <dependency>
-                <groupId>${project.groupId}</groupId>
-                <artifactId>postgresql-datasource</artifactId>
+                <artifactId>openshift-wildfly</artifactId>
                 <version>${project.version}</version>
                 <type>zip</type>
             </dependency>
@@ -111,4 +90,53 @@
             </plugins>
         </pluginManagement>
     </build>
+    
+    <repositories>
+        <repository>
+            <id>jboss-public-repository-group</id>
+            <url>http://repository.jboss.org/nexus/content/groups/public/</url>
+            <releases>
+                <enabled>true</enabled>
+                <updatePolicy>never</updatePolicy>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+                <updatePolicy>never</updatePolicy>
+            </snapshots>
+        </repository>
+        <repository>
+            <id>maven central</id>
+            <url>https://repo1.maven.org/maven2</url>
+            <releases>
+                <enabled>true</enabled>
+                <updatePolicy>never</updatePolicy>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+                <updatePolicy>never</updatePolicy>
+            </snapshots>
+        </repository>
+    </repositories>
+    <pluginRepositories>
+        <pluginRepository>
+            <id>plugin-repository</id>
+            <url>http://repository.jboss.org/nexus/content/groups/public-jboss
+            </url>
+            <releases>
+                <enabled>true</enabled>
+                <updatePolicy>never</updatePolicy>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+                <updatePolicy>never</updatePolicy>
+            </snapshots>
+        </pluginRepository>
+        <pluginRepository>
+            <id>maven central</id>
+            <url>https://repo1.maven.org/maven2</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+        </pluginRepository>
+    </pluginRepositories>
 </project>
